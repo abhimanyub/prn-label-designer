@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRN Label Studio</title>
+<style>
+  :root{
+    --bench:#15171C; --panel:#1D2026; --panel2:#23262E; --line:#2E323C;
+    --ink:#E9E7E1; --mut:#8B919E; --dim:#5C6270;
+    --acc:#FF7A1A; --acc-soft:rgba(255,122,26,.14);
+    --ok:#4CC38A; --warn:#E8B33C; --err:#F26D6D;
+    --paper:#FCFBF7;
+    --mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,'Liberation Mono',monospace;
+    --ui:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bench);color:var(--ink);font-family:var(--ui);font-size:13px;overflow:hidden}
+
+  /* ---------- header ---------- */
+  header{min-height:50px;display:flex;align-items:center;gap:10px;padding:6px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;letter-spacing:.16em;font-size:12px;white-space:nowrap}
+  .brand i{display:inline-block;width:9px;height:9px;background:var(--acc);border-radius:1px;margin-right:8px;transform:translateY(.5px)}
+  .pills{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .pills button{background:transparent;border:0;color:var(--mut);font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:6px 11px;cursor:pointer;border-right:1px solid var(--line)}
+  .pills button:last-child{border-right:0}
+  .pills button.on{background:var(--acc-soft);color:var(--acc)}
+  .spacer{flex:1}
+  select,input[type=text],input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:5px 8px;font-size:12px;font-family:var(--ui);outline:none}
+  select:focus,input:focus{border-color:var(--acc)}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:6px 11px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--acc);color:var(--acc)}
+  .btn.primary{background:var(--acc);border-color:var(--acc);color:#16130F;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.08);color:#16130F}
+  .toggle{display:flex;align-items:center;gap:7px;color:var(--mut);font-size:12px;cursor:pointer;user-select:none;white-space:nowrap}
+  .toggle .sw{width:30px;height:16px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);position:relative;transition:.15s;flex:none}
+  .toggle .sw::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--mut);transition:.15s}
+  .toggle.on .sw{background:var(--acc-soft);border-color:var(--acc)}
+  .toggle.on .sw::after{left:16px;background:var(--acc)}
+
+  /* ---------- layout ---------- */
+  main{display:flex;height:calc(100% - 51px)}
+  .col-left{width:330px;min-width:280px;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+  .col-center{flex:1;display:flex;flex-direction:column;min-width:0}
+  .col-right{width:300px;min-width:280px;border-left:1px solid var(--line);background:var(--panel);overflow-y:auto}
+  .sec{padding:12px 14px;border-bottom:1px solid var(--line)}
+  .sec h3,.code-head h3,.m-head h3{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--dim);font-weight:600;text-transform:uppercase}
+  .sec h3{margin-bottom:10px}
+
+  /* source editor (left) */
+  .code-head{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line)}
+  .code-status{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--ok);cursor:default}
+  .code-status.warn{color:var(--warn);cursor:pointer}
+  .code-status.err{color:var(--err);cursor:pointer}
+  #code{flex:1;background:#14161A;border:0;outline:none;resize:none;color:#D8D5CE;font-family:var(--mono);font-size:12px;line-height:1.55;padding:10px 14px;tab-size:8;caret-color:var(--acc);width:100%}
+  .code-foot{padding:7px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--dim);font-family:var(--mono)}
+
+  /* canvas */
+  .canvas-wrap{flex:1;overflow:auto;position:relative;display:flex;align-items:flex-start;justify-content:center;
+    background:radial-gradient(circle at 30% 0%,rgba(255,122,26,.04),transparent 50%),
+      repeating-linear-gradient(0deg,transparent 0 23px,rgba(255,255,255,.015) 23px 24px),var(--bench)}
+  .canvas-inner{padding:38px 40px 70px;display:flex;flex-direction:column;align-items:center}
+  .size-badge{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--dim);margin-bottom:12px}
+  .size-badge b{color:var(--mut);font-weight:600}
+  .canvas-hint{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--dim);margin-top:14px}
+  .label{position:relative;background:var(--paper);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 14px 34px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.4);border-radius:3px;flex:none;cursor:default;
+    background-image:radial-gradient(rgba(0,0,0,.05) .6px,transparent .6px);background-size:8px 8px}
+  .label::after{content:"";position:absolute;right:-1px;bottom:-1px;width:16px;height:16px;background:linear-gradient(135deg,transparent 50%,rgba(0,0,0,.10) 50%);border-radius:0 0 3px 0}
+  .lel{position:absolute;line-height:1;white-space:pre;color:#161514;transform-origin:top left;user-select:none;cursor:grab}
+  .lel:active{cursor:grabbing}
+  .lel.text{font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-weight:600;font-stretch:condensed}
+  .lel.rev{background:#161514;color:var(--paper);padding:0 2px}
+  .lel.sel{outline:1.5px dashed var(--acc);outline-offset:2px}
+  .lel svg{display:block}
+  .hri{font-family:var(--mono);text-align:center;color:#161514}
+
+  /* right panel widgets */
+  .field{margin-bottom:9px}
+  .field label{display:block;font-size:11px;color:var(--mut);margin-bottom:4px}
+  .field input,.field select,.field textarea{width:100%}
+  .field textarea{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:6px 8px;font-size:12px;font-family:var(--mono);resize:vertical;min-height:34px;outline:none}
+  .field textarea:focus{border-color:var(--acc)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .row-actions{display:flex;gap:6px;margin-top:10px}
+  .row-actions .btn{flex:1}
+  .empty{color:var(--dim);font-size:12px;line-height:1.5}
+  .chk{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--mut);cursor:pointer;margin-top:4px}
+  .chk input{accent-color:var(--acc)}
+  .hint{color:var(--dim);font-size:11px;font-family:var(--mono)}
+  .el-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;cursor:pointer;color:var(--mut);font-size:12px;border:1px solid transparent}
+  .el-row:hover{background:var(--panel2)}
+  .el-row.sel{border-color:var(--acc);color:var(--ink);background:var(--acc-soft)}
+  .el-row .tag{font-family:var(--mono);font-size:9px;letter-spacing:.08em;padding:2px 5px;border-radius:3px;background:var(--panel2);color:var(--dim);flex:none}
+  .el-row.sel .tag{color:var(--acc)}
+  .el-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .addbar{display:flex;gap:6px;margin-top:10px}
+  .addbar .btn{flex:1;text-align:center}
+
+  /* modals */
+  .backdrop{position:fixed;inset:0;background:rgba(8,9,12,.66);display:none;align-items:center;justify-content:center;z-index:50}
+  .backdrop.open{display:flex}
+  .modal{width:560px;max-width:92vw;max-height:82vh;background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+  .m-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .m-head .x{margin-left:auto;background:transparent;border:0;color:var(--mut);font-size:15px;cursor:pointer}
+  .m-head .x:hover{color:var(--acc)}
+  .m-body{overflow-y:auto;padding:10px 16px;flex:1}
+  .m-foot{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
+  .var-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(46,50,60,.5)}
+  .var-row code{font-family:var(--mono);font-size:11px;color:var(--mut);width:225px;flex:none;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .var-row code:hover{color:var(--acc)}
+  .var-row.used code{color:var(--acc)}
+  .var-row input{flex:1;min-width:0;padding:4px 7px;font-size:11px;font-family:var(--mono)}
+  .var-row .btn{padding:4px 8px;font-size:11px;flex:none}
+  .save-row{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(46,50,60,.5)}
+  .save-row .nm{font-weight:600}
+  .save-row .meta{font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .issue{display:flex;gap:9px;padding:6px 0;font-size:12px;border-bottom:1px solid rgba(46,50,60,.5)}
+  .issue .ln{font-family:var(--mono);color:var(--dim);width:52px;flex:none}
+  .issue.E .ln{color:var(--err)} .issue.W .ln{color:var(--warn)}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--acc);color:var(--ink);padding:8px 16px;border-radius:6px;font-size:12px;z-index:99;opacity:0;transition:.2s;pointer-events:none}
+  .toast.show{opacity:1}
+
+  @media (max-width:1100px){ .col-left{width:280px} .col-right{width:280px} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i></i>PRN&nbsp;LABEL&nbsp;STUDIO</div>
+  <div class="pills" id="fmtPills">
+    <button data-fmt="epl">EPL2</button><button data-fmt="zpl">ZPL II</button><button data-fmt="tspl">TSPL</button>
+  </div>
+  <div class="pills" id="zoomCtl">
+    <button data-z="1">1×</button><button data-z="1.5">1.5×</button><button data-z="2" class="on">2×</button><button data-z="3">3×</button>
+  </div>
+  <div class="toggle on" id="dataToggle"><div class="sw"></div>Sample data</div>
+  <div class="spacer"></div>
+  <button class="btn" id="btnVars">Variables</button>
+  <button class="btn" id="btnSaves">Saved edits</button>
+  <button class="btn" id="btnSave">Save edit</button>
+  <button class="btn" id="btnCopy">Copy</button>
+  <button class="btn primary" id="btnDownload">Download .prn</button>
+</header>
+<main>
+  <aside class="col-left">
+    <div class="code-head">
+      <h3 id="codeTitle">EPL2 SOURCE</h3>
+      <span class="code-status" id="codeStatus">● valid</span>
+      <div class="spacer"></div>
+    </div>
+    <textarea id="code" spellcheck="false" wrap="off"></textarea>
+    <div class="code-foot">edits here re-render the label · validated live</div>
+  </aside>
+
+  <section class="col-center">
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="canvas-inner">
+        <div class="size-badge" id="sizeBadge"></div>
+        <div class="label" id="label"></div>
+        <div class="canvas-hint">DRAG TO MOVE · ARROWS NUDGE (⇧ ×10) · ⌫ DELETE</div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="col-right">
+    <div class="sec">
+      <h3>Template</h3>
+      <select id="tplSelect" style="width:100%"></select>
+    </div>
+    <div class="sec">
+      <h3>Label stock</h3>
+      <div class="field"><label>Preset</label><select id="preset" style="width:100%"></select></div>
+      <div class="grid2">
+        <div class="field"><label>Width (dots)</label><input type="number" id="lw" min="50" step="2"></div>
+        <div class="field"><label>Height (dots)</label><input type="number" id="lh" min="50" step="2"></div>
+      </div>
+      <div class="hint" id="mmHint"></div>
+    </div>
+    <div class="sec">
+      <h3>Elements</h3>
+      <div id="elList"></div>
+      <div class="addbar">
+        <button class="btn" id="btnAddText">+ Text</button>
+        <button class="btn" id="btnAddBar">+ Barcode</button>
+      </div>
+    </div>
+    <div class="sec">
+      <h3>Properties</h3>
+      <div id="props"><div class="empty">Select an element on the label or in the list above.</div></div>
+    </div>
+  </aside>
+</main>
+
+<!-- variables modal -->
+<div class="backdrop" id="mVars"><div class="modal">
+  <div class="m-head"><h3>Variables & sample data</h3>
+    <input type="text" id="varSearch" placeholder="search…" style="width:170px">
+    <button class="x" data-close="mVars">✕</button></div>
+  <div class="m-body" id="varList"></div>
+  <div class="m-foot hint">Values affect the on-screen preview only — exported code keeps the {TOKENS}. Click a token name or Insert to add it to the label.</div>
+</div></div>
+
+<!-- saved edits modal -->
+<div class="backdrop" id="mSaves"><div class="modal">
+  <div class="m-head"><h3>Saved edits — this browser session</h3><button class="x" data-close="mSaves">✕</button></div>
+  <div class="m-body" id="saveList"></div>
+  <div class="m-foot hint" id="storageNote"></div>
+</div></div>
+
+<!-- save-as modal -->
+<div class="backdrop" id="mSaveAs"><div class="modal" style="width:420px">
+  <div class="m-head"><h3>Label this edit</h3><button class="x" data-close="mSaveAs">✕</button></div>
+  <div class="m-body">
+    <div class="field"><label>Name</label><input type="text" id="saveName" style="width:100%"></div>
+  </div>
+  <div class="m-foot"><div class="spacer"></div>
+    <button class="btn" data-close="mSaveAs">Cancel</button>
+    <button class="btn primary" id="saveConfirm">Save</button></div>
+</div></div>
+
+<!-- validation modal -->
+<div class="backdrop" id="mIssues"><div class="modal">
+  <div class="m-head"><h3 id="issuesTitle">Source validation</h3><button class="x" data-close="mIssues">✕</button></div>
+  <div class="m-body" id="issueList"></div>
+  <div class="m-foot"><span class="hint" id="issueSummary"></span><div class="spacer"></div>
+    <button class="btn" data-close="mIssues">Close</button>
+    <button class="btn primary" id="issueProceed" style="display:none">Proceed anyway</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+<script>
+/* ================= Code 128 encoder (Code set B) ================= */
+const C128=["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"];
+function code128Modules(data){
+  if(!data) data=" ";
+  const vals=[104];
+  for(const ch of data){ let v=ch.charCodeAt(0)-32; if(v<0||v>94) v=0; vals.push(v); }
+  let sum=vals[0]; for(let i=1;i<vals.length;i++) sum+=vals[i]*i;
+  vals.push(sum%103);
+  let pat=""; for(const v of vals) pat+=C128[v]; pat+=C128[106];
+  return pat;
+}
+function barcodeSVG(data,heightDots,moduleDots,zoom){
+  const pat=code128Modules(data);
+  let total=0; for(const c of pat) total+=+c;
+  const wD=total*moduleDots;
+  let x=0,bars="",bar=true;
+  for(const c of pat){
+    const w=+c*moduleDots;
+    if(bar) bars+=`<rect x="${x}" y="0" width="${w}" height="${heightDots}"/>`;
+    x+=w; bar=!bar;
+  }
+  return {wDots:wD,svg:`<svg width="${wD*zoom}" height="${heightDots*zoom}" viewBox="0 0 ${wD} ${heightDots}" shape-rendering="crispEdges" fill="#161514">${bars}</svg>`};
+}
+
+/* ================= font metrics & model ================= */
+const EPL_FONTS={1:[8,12],2:[10,16],3:[12,20],4:[14,24],5:[32,48]};
+const TSPL_FONTS={"0":[12,24],"1":[8,12],"2":[12,20],"3":[16,24],"4":[24,32],"5":[32,48]};
+function fontH(el,fmt){
+  if(fmt==="epl") return EPL_FONTS[el.epl.font][1]*el.epl.vm;
+  if(fmt==="tspl") return TSPL_FONTS[el.tspl.font][1]*el.tspl.ym;
+  return el.zpl.h;
+}
+function fontW(el,fmt){
+  if(fmt==="epl") return EPL_FONTS[el.epl.font][0]*el.epl.hm;
+  if(fmt==="tspl") return TSPL_FONTS[el.tspl.font][0]*el.tspl.xm;
+  return el.zpl.w||Math.round(el.zpl.h*0.52);
+}
+function nativesFromH(h){
+  let best=1,bd=1e9,bvm=1;
+  for(const f of [1,2,3,4,5]) for(let vm=1;vm<=6;vm++){
+    const d=Math.abs(EPL_FONTS[f][1]*vm-h); if(d<bd){bd=d;best=f;bvm=vm;}
+  }
+  let tf="1",tbd=1e9,tym=1;
+  for(const f of ["1","2","3","4","5"]) for(let ym=1;ym<=6;ym++){
+    const d=Math.abs(TSPL_FONTS[f][1]*ym-h); if(d<tbd){tbd=d;tf=f;tym=ym;}
+  }
+  return {epl:{font:best,hm:bvm,vm:bvm,rev:"N"},zpl:{h:h,w:0},tspl:{font:tf,xm:tym,ym:tym}};
+}
+let uid=1;
+function newText(x,y,text,h){
+  const n=nativesFromH(h||20);
+  return {id:uid++,kind:"text",x,y,rot:0,text,epl:n.epl,zpl:n.zpl,tspl:n.tspl};
+}
+function newBar(x,y,data,height,narrow){
+  return {id:uid++,kind:"barcode",x,y,rot:0,data,height:height||50,narrow:narrow||2,wide:(narrow||2)*2,hri:false};
+}
+
+/* ================= parsers ================= */
+function detectFormat(src){
+  if(/\^XA/.test(src)) return "zpl";
+  if(/^\s*SIZE\s+[\d.]+\s*mm/im.test(src)) return "tspl";
+  return "epl";
+}
+function parseEPL(src){
+  const lines=src.replace(/\r/g,"").split("\n");
+  const st={fmt:"epl",w:400,h:200,dpi:203,header:[],elements:[]};
+  for(const raw of lines){
+    const line=raw.trim();
+    if(!line) continue;
+    let m;
+    if(m=line.match(/^Q(\d+)(.*)$/)){ st.h=+m[1]; st.header.push({k:"Q",rest:m[2]}); continue; }
+    if(m=line.match(/^q(\d+)$/)){ st.w=+m[1]; st.header.push({k:"q"}); continue; }
+    if(m=line.match(/^A(-?\d+),(-?\d+),([0-3]),(\d+),(\d+),(\d+),([NR]),"(.*)"\s*$/)){
+      const el=newText(+m[1],+m[2],m[8],EPL_FONTS[Math.min(5,Math.max(1,+m[4]))][1]*+m[6]);
+      el.rot=+m[3]*90;
+      el.epl={font:Math.min(5,Math.max(1,+m[4])),hm:+m[5],vm:+m[6],rev:m[7]};
+      st.elements.push(el); continue;
+    }
+    if(m=line.match(/^B(-?\d+),(-?\d+),([0-3]),(\w+),(\d+),(\d+),(\d+),([NB]),"(.*)"\s*$/)){
+      const el=newBar(+m[1],+m[2],m[9],+m[7],+m[5]);
+      el.rot=+m[3]*90; el.wide=+m[6]; el.hri=m[8]==="B";
+      st.elements.push(el); continue;
+    }
+    if(/^P\d/.test(line)){ st.header.push({k:"P",line}); continue; }
+    st.header.push({k:"raw",line});
+  }
+  if(!st.header.some(h=>h.k==="P")) st.header.push({k:"P",line:"P1"});
+  return st;
+}
+function parseZPL(src){
+  const st={fmt:"zpl",w:400,h:230,dpi:203,header:[],elements:[]};
+  const body=src.replace(/[\r\n]/g,"");
+  const toks=body.split("^").map(t=>t.trim()).filter(Boolean);
+  let fo=null,cf={h:25,w:0},by={n:2},bc=null,m;
+  for(const t of toks){
+    if(t.startsWith("XA")||t.startsWith("XZ")) continue;
+    if(m=t.match(/^PW(\d+)/)){ st.w=+m[1]; continue; }
+    if(m=t.match(/^LL(\d+)/)){ st.h=+m[1]; continue; }
+    if(m=t.match(/^FO(-?\d+),(-?\d+)/)){ fo={x:+m[1],y:+m[2]}; continue; }
+    if(m=t.match(/^CF(\w?),?([\d.]+)?,?([\d.]+)?/)){ if(m[2]) cf={h:Math.round(+m[2]),w:m[3]?Math.round(+m[3]):0}; continue; }
+    if(m=t.match(/^BY([\d.]+)/)){ by={n:Math.round(+m[1])}; continue; }
+    if(m=t.match(/^BC(\w?),?(\d+)?,?([YN])?/)){ bc={h:m[2]?+m[2]:60,hri:m[3]==="Y"}; continue; }
+    if(m=t.match(/^A(\w)(\w)?,?(\d+)?,?(\d+)?/)){ if(m[3]) cf={h:+m[3],w:m[4]?+m[4]:0}; continue; }
+    if(t.startsWith("FD")){
+      const data=t.slice(2).replace(/FS$/,"").trim();
+      if(!fo) fo={x:0,y:0};
+      if(bc){
+        const el=newBar(fo.x,fo.y,data,bc.h,by.n); el.hri=bc.hri;
+        st.elements.push(el); bc=null;
+      }else{
+        const el=newText(fo.x,fo.y,data,cf.h);
+        el.zpl={h:cf.h,w:cf.w};
+        st.elements.push(el);
+      }
+      fo=null; continue;
+    }
+  }
+  return st;
+}
+function parseTSPL(src){
+  const lines=src.replace(/\r/g,"").split("\n");
+  const st={fmt:"tspl",w:400,h:200,dpi:203,header:[],elements:[]};
+  for(const raw of lines){
+    const line=raw.trim();
+    if(!line) continue;
+    let m;
+    if(m=line.match(/^SIZE\s+([\d.]+)\s*mm\s*,\s*([\d.]+)\s*mm/i)){ st.w=Math.round(+m[1]*8); st.h=Math.round(+m[2]*8); continue; }
+    if(m=line.match(/^TEXT\s+(-?\d+),(-?\d+),"([^"]+)",(\d+),(\d+),(\d+),"(.*)"\s*$/i)){
+      const f=TSPL_FONTS[m[3]]?m[3]:"3";
+      const el=newText(+m[1],+m[2],m[7],TSPL_FONTS[f][1]*+m[6]);
+      el.rot=+m[4]%360; el.tspl={font:f,xm:+m[5],ym:+m[6]};
+      st.elements.push(el); continue;
+    }
+    if(m=line.match(/^BARCODE\s+(-?\d+),(-?\d+),"([^"]+)",(\d+),(\d+),(\d+),(\d+),(\d+)(?:,"(.*)")?\s*$/i)){
+      const el=newBar(+m[1],+m[2],m[9]!==undefined?m[9]:"{SAMPLE_ID}",+m[4],+m[7]);
+      el.rot=+m[6]%360; el.wide=+m[8]; el.hri=m[5]!=="0";
+      st.elements.push(el); continue;
+    }
+    if(/^(PRINT|CLS)\b/i.test(line)) continue;
+    st.header.push({k:"raw",line});
+  }
+  return st;
+}
+function parseAny(src){
+  const f=detectFormat(src);
+  return f==="zpl"?parseZPL(src):f==="tspl"?parseTSPL(src):parseEPL(src);
+}
+
+/* ================= validation ================= */
+const EPL_CMDS=/^(M|N$|Q\d|q\d|S\d|D\d|Z[BT]|O|P\d|A-?\d|B-?\d|J[BF]|R-?\d|I\d|T[A-Z]|U|X-?\d|LO|LE|LW|LS|C\d|f\d|FR|FI|FK|FS|GG|GK|GW|;|W\d|Y\d|b\d|V\d|\?|TS|TT|TD|e[A-Z]|E[A-Z]|i|o[A-Z]|r[NY])/;
+function validateSource(src){
+  const fmt=detectFormat(src);
+  const issues=[]; // {sev:'E'|'W', line, msg}
+  const push=(sev,line,msg)=>issues.push({sev,line,msg});
+  const st=parseAny(src);
+  if(fmt==="epl"){
+    src.replace(/\r/g,"").split("\n").forEach((raw,i)=>{
+      const line=raw.trim(); if(!line) return;
+      const ln=i+1;
+      if(/^A/.test(line)&&!/^A-?\d+,-?\d+,[0-3],\d+,\d+,\d+,[NR],".*"\s*$/.test(line))
+        push("E",ln,'Malformed A (text) command — expected A{x},{y},{rot 0-3},{font},{hm},{vm},{N|R},"text"');
+      else if(/^B/.test(line)&&!/^B-?\d+,-?\d+,[0-3],\w+,\d+,\d+,\d+,[NB],".*"\s*$/.test(line))
+        push("E",ln,'Malformed B (barcode) command — expected B{x},{y},{rot},{type},{narrow},{wide},{height},{N|B},"data"');
+      else if(!EPL_CMDS.test(line)&&!/^[AB]/.test(line))
+        push("E",ln,`Unknown EPL command: "${line.slice(0,24)}"`);
+    });
+    if(!/^P\d/m.test(src)) push("W",0,"No P (print) command — printer will buffer but not print");
+    if(!/^q\d/m.test(src)) push("W",0,"No q (label width) command — printer will use its stored width");
+  }
+  if(fmt==="zpl"){
+    if(!/\^XA/.test(src)) push("E",0,"Missing ^XA (start of format)");
+    if(!/\^XZ/.test(src)) push("E",0,"Missing ^XZ (end of format)");
+    const fdCount=(src.match(/\^FD/g)||[]).length, fsCount=(src.match(/\^FS/g)||[]).length;
+    if(fdCount>fsCount) push("E",0,`${fdCount-fsCount} ^FD field(s) not closed with ^FS`);
+    const foCount=(src.match(/\^FO/g)||[]).length;
+    if(fdCount>foCount) push("W",0,"A ^FD field has no preceding ^FO — it will print at the label origin");
+    if(!/\^PW/.test(src)) push("W",0,"No ^PW (print width) — using assumed width");
+  }
+  if(fmt==="tspl"){
+    const KNOWN=/^(SIZE|GAP|BLINE|DIRECTION|REFERENCE|OFFSET|SHIFT|SPEED|DENSITY|SET\b|CODEPAGE|COUNTRY|CLS|TEXT|BARCODE|QRCODE|BOX|BAR\b|REVERSE|PUTBMP|BITMAP|PRINT|SOUND|CUT|HOME|FORMFEED|LIMITFEED)/i;
+    src.replace(/\r/g,"").split("\n").forEach((raw,i)=>{
+      const line=raw.trim(); if(!line) return;
+      const ln=i+1;
+      if(/^TEXT/i.test(line)&&!/^TEXT\s+-?\d+,-?\d+,"[^"]+",\d+,\d+,\d+,".*"\s*$/i.test(line))
+        push("E",ln,'Malformed TEXT — expected TEXT x,y,"font",rotation,x-mult,y-mult,"content"');
+      else if(/^BARCODE/i.test(line)&&!/^BARCODE\s+-?\d+,-?\d+,"[^"]+",\d+,\d+,\d+,\d+,\d+(,".*")?\s*$/i.test(line))
+        push("E",ln,'Malformed BARCODE — expected BARCODE x,y,"type",height,readable,rotation,narrow,wide,"content"');
+      else if(/^BARCODE/i.test(line)&&!/,".*"\s*$/.test(line))
+        push("W",ln,"BARCODE has no content parameter — most TSC firmware rejects this");
+      else if(!KNOWN.test(line))
+        push("E",ln,`Unknown TSPL command: "${line.slice(0,24)}"`);
+    });
+    if(!/^SIZE/im.test(src)) push("W",0,"No SIZE command — printer will use stored label size");
+    if(!/^PRINT/im.test(src)) push("W",0,"No PRINT command — nothing will print");
+  }
+  // shared bounds / content checks
+  for(const el of st.elements){
+    if(el.x>=st.w||el.y>=st.h) push("W",0,`${el.kind==="text"?"Text":"Barcode"} "${(el.kind==="text"?el.text:el.data).slice(0,18)}" starts outside the ${st.w}×${st.h} label`);
+    if(el.kind==="barcode"&&!el.data) push("W",0,"Barcode with empty data");
+  }
+  if(!st.elements.length) push("E",0,"No printable elements (text or barcode) found");
+  return {fmt,st,issues,errors:issues.filter(i=>i.sev==="E"),warnings:issues.filter(i=>i.sev==="W")};
+}
+
+/* ================= generators ================= */
+function genEPL(st){
+  const out=[];
+  const hdr=st.header.filter(h=>h.k==="raw").map(h=>h.line);
+  const hasHdr=hdr.length>0;
+  if(hasHdr&&/^M/.test(hdr[0])) out.push(hdr.shift());
+  else if(!hasHdr) out.push("M10,5,5");
+  out.push("N");
+  out.push(`Q${st.h},24+0`);
+  out.push(`q${st.w}`);
+  for(const l of hdr) if(!/^[NQq]/.test(l)) out.push(l);
+  if(!hasHdr){ out.push("S3","D10","ZB","O"); }
+  for(const el of st.elements){
+    const r=Math.round((el.rot%360)/90)%4;
+    if(el.kind==="text") out.push(`A${el.x},${el.y},${r},${el.epl.font},${el.epl.hm},${el.epl.vm},${el.epl.rev},"${el.text}"`);
+    else out.push(`B${el.x},${el.y},${r},1,${el.narrow},${el.wide},${el.height},${el.hri?"B":"N"},"${el.data}"`);
+  }
+  const p=st.header.find(h=>h.k==="P");
+  out.push(p?p.line:"P1");
+  return out.join("\n");
+}
+function genZPL(st){
+  const out=["^XA",`^PW${st.w}`,`^LL${st.h}`,""];
+  for(const el of st.elements){
+    if(el.kind==="text"){
+      out.push(`^FO${el.x},${el.y}`);
+      out.push(`^CF0,${el.zpl.h}${el.zpl.w?","+el.zpl.w:""}`);
+      out.push(`^FD${el.text}^FS`,"");
+    }else{
+      out.push(`^FO${el.x},${el.y}^BY${el.narrow},2.5`);
+      out.push(`^BCN,${el.height},${el.hri?"Y":"N"},N`);
+      out.push(`^FD${el.data}^FS`,"");
+    }
+  }
+  out.push("^XZ");
+  return out.join("\n");
+}
+function genTSPL(st){
+  const out=[`SIZE ${(st.w/8).toFixed(0)} mm,${(st.h/8).toFixed(0)} mm`];
+  const hdr=st.header.filter(h=>h.k==="raw").map(h=>h.line).filter(l=>!/^SIZE/i.test(l));
+  if(hdr.length) out.push(...hdr); else out.push("GAP 3 mm,0","DIRECTION 0");
+  out.push("CLS");
+  for(const el of st.elements){
+    if(el.kind==="text") out.push(`TEXT ${el.x},${el.y},"${el.tspl.font}",${el.rot%360},${el.tspl.xm},${el.tspl.ym},"${el.text}"`);
+    else out.push(`BARCODE ${el.x},${el.y},"128",${el.height},${el.hri?1:0},${el.rot%360},${el.narrow},${el.wide},"${el.data}"`);
+  }
+  out.push("PRINT 1,1");
+  return out.join("\n");
+}
+function generate(st){ return st.fmt==="zpl"?genZPL(st):st.fmt==="tspl"?genTSPL(st):genEPL(st); }
+/* ================= variable catalog (from CrelioHealth debug log) ================= */
+const VARS=[
+["SAMPLE_ID","000614926"],["BARCODE","000614926"],["MANUALSAMPLEID","000614926"],["AUTOSAMPLEID","104"],
+["SAMPLE_NAME","Serum-1"],["SAMPLE_TYPE","Serum"],["SAMPLE_DATE","29-05-2026 16:29"],["SAMPLEDATE","2026-05-29T16:29:01Z"],
+["REPORT_SAMPLE_NAME","Serum-1"],["REPORT_SAMPLE_TYPE","Serum"],["REPORT_CONTAINER_TYPE","SST 5mL"],["CONTAINER_TYPE","SST 5mL"],
+["TUBE_COLOR","YELLOW"],["PRIORITY","ROUTINE"],
+["ACCESSION_DATETIME","29-05-2026 16:29"],["ACCESSIONDATE","2026-05-29T16:29:01Z"],["REPORTDATE","2026-05-29T16:29:01Z"],
+["CURRENT_LOCAL_TIME","2026-06-04 20:55"],["CURRENT_TIME","2026-06-04T15:25:05Z"],
+["PATIENT_NAME","Tammy Smith"],["PATIENT_FULLNAME","Tammy Smith"],["PATIENT_FIRSTNAME","Tammy"],["PATIENT_MIDDLENAME","K"],["PATIENT_LASTNAME","Smith"],["PATIENT_SUFFIX","Jr"],
+["AGE","4 years"],["PATIENT_AGE","4 years"],["PATIENT_AGEINDAYS","1486"],["DOB","2022-05-04"],["PATIENT_DATEOFBIRTH","2022-05-04"],
+["GENDER","F"],["PATIENT_SEX","Female"],
+["PATIENT_ID","111"],["PATIENT_LABPATIENTID","9874"],["PATIENT_LABUSERID","111"],["PATIENT_PATIENTTYPE","I"],
+["PATIENT_CONTACT","1234567999"],["PATIENT_ALTERNATECONTACT","1234567888"],["PATIENT_COUNTRYCODE","1"],["PATIENT_EMAIL","tammy@example.com"],
+["PATIENT_HEIGHT","104 cm"],["PATIENT_WEIGHT","17 kg"],["PATIENT_WARDNO","W-3"],["PATIENT_DESIGNATION","STAFF"],
+["PATIENT_NATIONALITY","USA"],["PATIENT_NATIONALIDENTITYNUMBER","XXX-XX-1234"],["PATIENT_PASSPORTNO","P1234567"],["PATIENT_WORKERCODE","WC-88"],
+["NATIONAL_ID","XXX-XX-1234"],["EMPLOYEE_ID","EMP-204"],["USERNAME","frontdesk1"],
+["TESTNAME","ANA Confirmatory Test"],["TESTCODE","10060"],["TESTCATEGORY","Immunology"],
+["TESTS","10060"],["TESTS_LINE_1","10060"],["TESTS_LINE_2","10072"],["TESTS_LINE_3","ALT"],
+["SHORT_TEXT","ANA Profile"],["SHORTTEXT","ANA Profile"],["SHORT_TEXT_1","ANA Profile"],["SHORT_TEXT_2","UA"],["SHORT_TEXT_3","ALT"],
+["DEPARTMENTNAME","Biochemistry"],["LABNAME","Life Well Cadence Labs"],["PROFILECODE","WELLNESS-A"],
+["BILL_ID","91"],["BILL_LABBILLID","91"],["BILL_ORDERNUMBER","ORD-20458"],["BILL_BILLCOMPANY","SELF PAY"],
+["BILL_REFERAL","SELF"],["BILL_BILLREFERAL","SELF"],["BILL_BILLTIME","2026-05-29T16:29:01Z"],["BILL_WARD_NUMBER","W-3"],
+["ORG_ID","12345"],["ORGANIZATION_ORGCODE","12345"],["ORGANIZATION_ORGFULLNAME","DIRECT"],
+["COLLECTEDSAMPLE_LOCATION","DRAW STN 2"],["COLLECTEDSAMPLELOCATION","DRAW STN 2"],["COLLECTEDSAMPLE_RACKNO","0"],["COLLECTEDSAMPLE_VIALS_COUNT","1"],
+["PROCESSING_LOCATION","MAIN LAB"],["EMERGENCY_STAT","STAT"],["EMERGENCY_EMER","EMER"],
+["PRINT_COUNT","1"],["MODE","0"]
+];
+const SAMPLE_DEFAULTS=Object.fromEntries(VARS);
+
+/* ================= label size presets (203 dpi · 8 dots/mm) ================= */
+const PRESETS=[
+["50 × 25 mm — vial / sample (2×1\")",400,200],
+["38 × 25 mm — small vial (1.5×1\")",304,200],
+["50 × 30 mm",400,240],
+["57 × 32 mm",456,256],
+["75 × 50 mm (3×2\")",600,400],
+["100 × 50 mm (4×2\")",800,400],
+["100 × 75 mm (4×3\")",800,600],
+["100 × 150 mm — shipping (4×6\")",800,1200]
+];
+
+/* ================= templates ================= */
+const TEMPLATES=[
+{name:"Sample label — EPL (compact)",fmt:"EPL2",src:`M10,5,5
+N
+Q200,24+0
+q400
+S3
+D10
+ZB
+O
+B20,15,0,1,2,2,60,N,"{SAMPLE_ID}"
+A20,80,0,2,1,1,N,"{SAMPLE_ID}\t{SAMPLE_TYPE}"
+A20,100,0,2,1,1,N,"{PATIENT_NAME} ({AGE}/{GENDER})"
+A20,120,0,2,1,1,N,"{ACCESSION_DATETIME}"
+A20,140,0,2,1,1,N,"{TESTS_LINE_1}"
+A20,160,0,2,1,1,N,"{TESTS_LINE_2}"
+P1`},
+{name:"Sample label — EPL (large ID)",fmt:"EPL2",src:`M10,5,5
+N
+Q200,24+0
+q400
+S3
+D10
+ZB
+O
+B40,10,0,1,3,3,55,N,"{SAMPLE_ID}"
+A40,69,0,4,1,1,N,"{SAMPLE_ID}\t({SAMPLE_TYPE})"
+A20,95,0,3,1,1,N,"{PATIENT_NAME} ({AGE}/{GENDER})"
+A160,115,0,3,1,1,N,"{ACCESSION_DATETIME}"
+P1`},
+{name:"Profile label — EPL",fmt:"EPL2",src:`M10,5,5
+N
+Q203,24+0
+q406
+S3
+D10
+ZB
+O
+A50,15,0,3,1,1,N,"{SAMPLE_ID}"
+B100,40,0,1,2,2,80,N,"{SAMPLE_ID}"
+A50,125,0,2,1,1,N,"{PATIENT_NAME} ({GENDER})"
+A50,150,0,3,1,1,N,"{PROFILECODE}"
+P1`},
+{name:"Sample label — ZPL",fmt:"ZPL II",src:`^XA
+^FO20,30^BY2,2.5
+^BCN,50,N,N,A
+^FD{SAMPLE_ID}^FS
+
+^FO20,85
+^CF0,25
+^FD{SAMPLE_ID}  ({SAMPLE_TYPE})^FS
+
+^FO20,110
+^CF0,25
+^FD{PATIENT_NAME}  ({AGE}/{GENDER})^FS
+
+^FO180,135
+^CF0,25
+^FD{ACCESSION_DATETIME}^FS
+
+^FO20,160
+^CF0,18
+^FD{TESTS_LINE_1}^FS
+
+^FO20,180
+^CF0,18
+^FD{TESTS_LINE_2}^FS
+
+^FO20,200
+^CF0,18
+^FD{TESTS_LINE_3}^FS
+
+^XZ`},
+{name:"Sample label — TSPL 50×25",fmt:"TSPL",src:`SIZE 50 mm,25 mm
+GAP 3 mm,0
+DIRECTION 0
+CLS
+BARCODE 10,10,"128",50,0,0,1,1,"{SAMPLE_ID}"
+TEXT 10,70,"3",0,1,1,"{SAMPLE_ID} ({SAMPLE_TYPE})"
+TEXT 10,100,"3",0,1,1,"{PATIENT_NAME} ({AGE}/{GENDER})"
+TEXT 10,130,"3",0,1,1,"{ACCESSION_DATETIME}"
+TEXT 10,160,"2",0,1,1,"{TESTS_LINE_1}"
+TEXT 10,186,"2",0,1,1,"{TESTS_LINE_2}"
+PRINT 1,1`}
+];
+
+/* ================= session storage (browser only, in-memory fallback) ================= */
+let canSS=false,memStore={};
+try{ sessionStorage.setItem("__t","1"); sessionStorage.removeItem("__t"); canSS=true; }catch(e){}
+const sget=k=>{ try{ return canSS?sessionStorage.getItem(k):(memStore[k]??null); }catch(e){ return memStore[k]??null; } };
+const sset=(k,v)=>{ try{ if(canSS){ sessionStorage.setItem(k,v); return; } }catch(e){} memStore[k]=v; };
+function getSaves(){ try{ return JSON.parse(sget("prn.saves")||"[]"); }catch(e){ return []; } }
+function putSaves(arr){ sset("prn.saves",JSON.stringify(arr)); }
+
+/* ================= state & rendering ================= */
+let state=null, sel=null, zoom=2, useSample=true, syncing=false, lastValidation=null;
+const sampleData={...SAMPLE_DEFAULTS};
+const $=id=>document.getElementById(id);
+
+function substitute(s){
+  if(!useSample) return s;
+  return s.replace(/\{([A-Za-z0-9_]+)\}/g,(m,k)=>sampleData[k]!==undefined&&sampleData[k]!==""?sampleData[k]:m);
+}
+function usedPlaceholders(){
+  const set=new Set();
+  for(const el of state.elements){
+    const s=el.kind==="text"?el.text:el.data;
+    for(const m of s.matchAll(/\{([A-Za-z0-9_]+)\}/g)) set.add(m[1]);
+  }
+  return set;
+}
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove("show"),1700);
+}
+
+function renderLabel(){
+  const L=$("label");
+  L.style.width=state.w*zoom+"px";
+  L.style.height=state.h*zoom+"px";
+  L.innerHTML="";
+  for(const el of state.elements){
+    const d=document.createElement("div");
+    d.className="lel "+el.kind+(sel===el.id?" sel":"");
+    d.style.left=el.x*zoom+"px";
+    d.style.top=el.y*zoom+"px";
+    if(el.rot%360) d.style.transform=`rotate(${el.rot%360}deg)`;
+    if(el.kind==="text"){
+      if(state.fmt==="epl"&&el.epl.rev==="R") d.classList.add("rev");
+      const h=fontH(el,state.fmt), w=fontW(el,state.fmt);
+      d.style.fontSize=h*zoom+"px";
+      const txt=substitute(el.text).replace(/\t/g,"    ");
+      d.textContent=txt;
+      requestAnimationFrame(()=>{
+        const target=txt.length*w*zoom;
+        if(d.scrollWidth>0&&target>0){
+          const ratio=target/d.scrollWidth;
+          if(ratio<1) d.style.transform=(el.rot%360?`rotate(${el.rot%360}deg) `:"")+`scaleX(${Math.max(.6,ratio)})`;
+        }
+      });
+    }else{
+      const data=substitute(el.data);
+      const bc=barcodeSVG(data,el.height,el.narrow,zoom);
+      let html=bc.svg;
+      if(el.hri) html+=`<div class="hri" style="font-size:${10*zoom}px;width:${bc.wDots*zoom}px;margin-top:${2*zoom}px">${data.replace(/</g,"&lt;")}</div>`;
+      d.innerHTML=html;
+    }
+    d.dataset.id=el.id;
+    L.appendChild(d);
+  }
+  $("sizeBadge").innerHTML=`<b>${state.w} × ${state.h}</b> dots&nbsp;&nbsp;·&nbsp;&nbsp;${(state.w/8).toFixed(1)} × ${(state.h/8).toFixed(1)} mm&nbsp;&nbsp;·&nbsp;&nbsp;203 dpi&nbsp;&nbsp;·&nbsp;&nbsp;CODE 128`;
+}
+function renderElList(){
+  const box=$("elList"); box.innerHTML="";
+  for(const el of state.elements){
+    const r=document.createElement("div");
+    r.className="el-row"+(sel===el.id?" sel":"");
+    r.innerHTML=`<span class="tag">${el.kind==="text"?"TXT":"BAR"}</span><span></span>`;
+    r.lastElementChild.textContent=(el.kind==="text"?el.text:el.data)||"(empty)";
+    r.onclick=()=>{sel=el.id;refresh(false);};
+    box.appendChild(r);
+  }
+  if(!state.elements.length) box.innerHTML='<div class="empty">No elements yet.</div>';
+}
+function renderProps(){
+  const box=$("props");
+  const el=state.elements.find(e=>e.id===sel);
+  if(!el){ box.innerHTML='<div class="empty">Select an element on the label or in the list above.</div>'; return; }
+  const f=state.fmt;
+  let html=`<div class="grid3">
+    <div class="field"><label>X (dots)</label><input type="number" id="p_x" value="${el.x}"></div>
+    <div class="field"><label>Y (dots)</label><input type="number" id="p_y" value="${el.y}"></div>
+    <div class="field"><label>Rotate</label><select id="p_rot">${[0,90,180,270].map(r=>`<option ${el.rot%360===r?"selected":""}>${r}</option>`).join("")}</select></div>
+  </div>`;
+  if(el.kind==="text"){
+    html+=`<div class="field"><label>Text</label><textarea id="p_text">${el.text.replace(/</g,"&lt;")}</textarea></div>`;
+    if(f==="epl") html+=`<div class="grid3">
+      <div class="field"><label>Font 1–5</label><select id="p_f">${[1,2,3,4,5].map(v=>`<option ${el.epl.font===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label>H-mult</label><input type="number" id="p_hm" min="1" max="8" value="${el.epl.hm}"></div>
+      <div class="field"><label>V-mult</label><input type="number" id="p_vm" min="1" max="9" value="${el.epl.vm}"></div>
+    </div><label class="chk"><input type="checkbox" id="p_rev" ${el.epl.rev==="R"?"checked":""}>Reverse (white on black)</label>`;
+    if(f==="zpl") html+=`<div class="grid2">
+      <div class="field"><label>Font height (dots)</label><input type="number" id="p_zh" min="6" value="${el.zpl.h}"></div>
+      <div class="field"><label>Width (0 = auto)</label><input type="number" id="p_zw" min="0" value="${el.zpl.w}"></div>
+    </div>`;
+    if(f==="tspl") html+=`<div class="grid3">
+      <div class="field"><label>Font</label><select id="p_tf">${["0","1","2","3","4","5"].map(v=>`<option ${el.tspl.font===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label>X-mult</label><input type="number" id="p_txm" min="1" max="10" value="${el.tspl.xm}"></div>
+      <div class="field"><label>Y-mult</label><input type="number" id="p_tym" min="1" max="10" value="${el.tspl.ym}"></div>
+    </div>`;
+  }else{
+    html+=`<div class="field"><label>Data</label><textarea id="p_data">${el.data.replace(/</g,"&lt;")}</textarea></div>
+    <div class="grid2">
+      <div class="field"><label>Height (dots)</label><input type="number" id="p_bh" min="10" value="${el.height}"></div>
+      <div class="field"><label>Module (dots)</label><input type="number" id="p_bn" min="1" max="6" value="${el.narrow}"></div>
+    </div>
+    <label class="chk"><input type="checkbox" id="p_hri" ${el.hri?"checked":""}>Human-readable text below</label>`;
+  }
+  html+=`<div class="row-actions">
+    <button class="btn" id="p_var">{＋} Variable</button>
+    <button class="btn" id="p_dup">Duplicate</button>
+    <button class="btn" id="p_del" style="color:var(--err)">Delete</button>
+  </div>`;
+  box.innerHTML=html;
+  const upd=fn=>e=>{fn(e);commit();};
+  $("p_x").oninput=upd(e=>el.x=+e.target.value||0);
+  $("p_y").oninput=upd(e=>el.y=+e.target.value||0);
+  $("p_rot").onchange=upd(e=>el.rot=+e.target.value);
+  if(el.kind==="text"){
+    $("p_text").oninput=upd(e=>el.text=e.target.value);
+    if(f==="epl"){
+      $("p_f").onchange=upd(e=>{el.epl.font=+e.target.value;syncSizes(el);});
+      $("p_hm").oninput=upd(e=>el.epl.hm=Math.max(1,+e.target.value||1));
+      $("p_vm").oninput=upd(e=>{el.epl.vm=Math.max(1,+e.target.value||1);syncSizes(el);});
+      $("p_rev").onchange=upd(e=>el.epl.rev=e.target.checked?"R":"N");
+    }
+    if(f==="zpl"){
+      $("p_zh").oninput=upd(e=>{el.zpl.h=Math.max(6,+e.target.value||6);syncSizes(el);});
+      $("p_zw").oninput=upd(e=>el.zpl.w=Math.max(0,+e.target.value||0));
+    }
+    if(f==="tspl"){
+      $("p_tf").onchange=upd(e=>{el.tspl.font=e.target.value;syncSizes(el);});
+      $("p_txm").oninput=upd(e=>el.tspl.xm=Math.max(1,+e.target.value||1));
+      $("p_tym").oninput=upd(e=>{el.tspl.ym=Math.max(1,+e.target.value||1);syncSizes(el);});
+    }
+  }else{
+    $("p_data").oninput=upd(e=>el.data=e.target.value);
+    $("p_bh").oninput=upd(e=>el.height=Math.max(10,+e.target.value||10));
+    $("p_bn").oninput=upd(e=>{el.narrow=Math.max(1,+e.target.value||1);el.wide=el.narrow*2;});
+    $("p_hri").onchange=upd(e=>el.hri=e.target.checked);
+  }
+  $("p_var").onclick=()=>openModal("mVars");
+  $("p_dup").onclick=()=>{
+    const c=JSON.parse(JSON.stringify(el)); c.id=uid++; c.x+=10; c.y+=10;
+    state.elements.push(c); sel=c.id; commit(true);
+  };
+  $("p_del").onclick=()=>{ state.elements=state.elements.filter(e=>e.id!==el.id); sel=null; commit(true); };
+}
+function syncSizes(el){
+  const h=fontH(el,state.fmt);
+  const n=nativesFromH(h);
+  if(state.fmt!=="epl"){const rev=el.epl.rev;el.epl=n.epl;el.epl.rev=rev;}
+  if(state.fmt!=="zpl") el.zpl=n.zpl;
+  if(state.fmt!=="tspl") el.tspl=n.tspl;
+}
+/* ================= variables modal ================= */
+function renderVars(){
+  const box=$("varList"); box.innerHTML="";
+  const q=($("varSearch").value||"").toUpperCase();
+  const used=usedPlaceholders();
+  const all=[...VARS.map(v=>v[0])];
+  for(const k of used) if(!SAMPLE_DEFAULTS.hasOwnProperty(k)) all.unshift(k); // custom tokens in template
+  const sorted=all.filter(k=>!q||k.includes(q)).sort((a,b)=>(used.has(b)-used.has(a))||a.localeCompare(b));
+  for(const k of sorted){
+    if(sampleData[k]===undefined) sampleData[k]=SAMPLE_DEFAULTS[k]||"";
+    const row=document.createElement("div");
+    row.className="var-row"+(used.has(k)?" used":"");
+    row.innerHTML=`<code title="click to insert">{${k}}</code><input type="text"><button class="btn">Insert</button>`;
+    const inp=row.querySelector("input"); inp.value=sampleData[k];
+    inp.oninput=()=>{ sampleData[k]=inp.value; renderLabel(); };
+    const ins=()=>insertVariable(k);
+    row.querySelector("code").onclick=ins;
+    row.querySelector(".btn").onclick=ins;
+    box.appendChild(row);
+  }
+  if(!sorted.length) box.innerHTML='<div class="empty" style="padding:14px 0">No variables match.</div>';
+}
+function insertVariable(k){
+  const tok="{"+k+"}";
+  const el=state.elements.find(e=>e.id===sel);
+  if(el&&el.kind==="text"){ el.text=el.text?el.text+" "+tok:tok; toast(tok+" appended to selected text"); }
+  else if(el&&el.kind==="barcode"){ el.data=tok; toast("Barcode data set to "+tok); }
+  else{
+    const ne=newText(20,20,tok,20);
+    state.elements.push(ne); sel=ne.id;
+    toast(tok+" added as new text element");
+  }
+  commit(true); renderVars();
+}
+
+/* ================= saved edits ================= */
+function renderSaves(){
+  const box=$("saveList"); box.innerHTML="";
+  const saves=getSaves();
+  $("storageNote").textContent=canSS
+    ? "Stored in this browser session only (sessionStorage). Nothing leaves your machine."
+    : "Browser storage is blocked in this sandbox — saves last while this page stays open. Host the file yourself for full session persistence.";
+  if(!saves.length){ box.innerHTML='<div class="empty" style="padding:14px 0">No saved edits yet. Use “Save edit” to snapshot the current label with a name.</div>'; return; }
+  for(const s of [...saves].reverse()){
+    const row=document.createElement("div"); row.className="save-row";
+    row.innerHTML=`<div style="flex:1;min-width:0"><div class="nm"></div><div class="meta">${s.fmt.toUpperCase()} · ${s.w}×${s.h} dots · ${new Date(s.ts).toLocaleTimeString()}</div></div>
+      <button class="btn load">Load</button><button class="btn del" style="color:var(--err)">Delete</button>`;
+    row.querySelector(".nm").textContent=s.name;
+    row.querySelector(".load").onclick=()=>{
+      state=parseAny(s.code); state.fmt=s.fmt; sel=null; refresh(); closeModal("mSaves"); toast("Loaded “"+s.name+"”");
+    };
+    row.querySelector(".del").onclick=()=>{ putSaves(getSaves().filter(x=>x.id!==s.id)); renderSaves(); };
+    box.appendChild(row);
+  }
+}
+
+/* ================= validation UI ================= */
+function showIssues(v,onProceed){
+  const box=$("issueList"); box.innerHTML="";
+  for(const i of v.issues){
+    const d=document.createElement("div"); d.className="issue "+i.sev;
+    d.innerHTML=`<span class="ln">${i.sev==="E"?"ERR":"WARN"}${i.line?" L"+i.line:""}</span><span></span>`;
+    d.lastElementChild.textContent=i.msg;
+    box.appendChild(d);
+  }
+  if(!v.issues.length) box.innerHTML='<div class="empty" style="padding:14px 0">No issues — source is valid.</div>';
+  $("issueSummary").textContent=`${v.errors.length} error(s), ${v.warnings.length} warning(s)`;
+  const p=$("issueProceed");
+  if(onProceed&&!v.errors.length&&v.warnings.length){ p.style.display=""; p.onclick=()=>{ closeModal("mIssues"); onProceed(); }; }
+  else p.style.display="none";
+  openModal("mIssues");
+}
+function validateThen(action){
+  const v=validateSource($("code").value);
+  if(v.errors.length){ showIssues(v); toast("Fix source errors first"); return; }
+  if(v.warnings.length){ showIssues(v,action); return; }
+  action();
+}
+
+/* ================= sync, chrome, persistence ================= */
+function renderCode(){
+  syncing=true;
+  $("code").value=generate(state);
+  $("codeTitle").textContent={epl:"EPL2 SOURCE",zpl:"ZPL II SOURCE",tspl:"TSPL SOURCE"}[state.fmt];
+  liveValidate();
+  syncing=false;
+}
+function liveValidate(){
+  const v=validateSource($("code").value); lastValidation=v;
+  const s=$("codeStatus");
+  if(v.errors.length){ s.textContent="● "+v.errors.length+" error"+(v.errors.length>1?"s":""); s.className="code-status err"; }
+  else if(v.warnings.length){ s.textContent="● "+v.warnings.length+" warning"+(v.warnings.length>1?"s":""); s.className="code-status warn"; }
+  else { s.textContent="● valid"; s.className="code-status"; }
+}
+$("codeStatus").onclick=()=>{ if(lastValidation&&lastValidation.issues.length) showIssues(lastValidation); };
+
+function renderChrome(){
+  document.querySelectorAll("#fmtPills button").forEach(b=>b.classList.toggle("on",b.dataset.fmt===state.fmt));
+  $("lw").value=state.w; $("lh").value=state.h;
+  $("mmHint").textContent=`= ${(state.w/8).toFixed(1)} × ${(state.h/8).toFixed(1)} mm at 203 dpi (8 dots/mm)`;
+  const pi=PRESETS.findIndex(p=>p[1]===state.w&&p[2]===state.h);
+  $("preset").value=pi>=0?pi:"custom";
+}
+let persistTm=null;
+function persist(){
+  clearTimeout(persistTm);
+  persistTm=setTimeout(()=>sset("prn.current",JSON.stringify({fmt:state.fmt,code:generate(state)})),300);
+}
+function refresh(code=true){
+  renderLabel(); renderElList(); renderProps(); renderChrome();
+  if(code) renderCode();
+  persist();
+}
+function commit(full){ if(full) refresh(); else {renderLabel();renderElList();renderCode();persist();} }
+
+/* ================= interactions ================= */
+let drag=null;
+$("label").addEventListener("mousedown",e=>{
+  const t=e.target.closest(".lel");
+  if(!t){sel=null;refresh(false);return;}
+  sel=+t.dataset.id;
+  const el=state.elements.find(x=>x.id===sel);
+  drag={el,sx:e.clientX,sy:e.clientY,ox:el.x,oy:el.y,moved:false};
+  refresh(false);
+  e.preventDefault();
+});
+window.addEventListener("mousemove",e=>{
+  if(!drag) return;
+  const dx=Math.round((e.clientX-drag.sx)/zoom), dy=Math.round((e.clientY-drag.sy)/zoom);
+  if(dx||dy) drag.moved=true;
+  drag.el.x=Math.max(0,drag.ox+dx);
+  drag.el.y=Math.max(0,drag.oy+dy);
+  renderLabel();
+  const px=$("p_x"),py=$("p_y");
+  if(px){px.value=drag.el.x;py.value=drag.el.y;}
+});
+window.addEventListener("mouseup",()=>{ if(drag){ if(drag.moved){renderCode();persist();} drag=null; } });
+window.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){ document.querySelectorAll(".backdrop.open").forEach(b=>b.classList.remove("open")); return; }
+  if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  const el=state&&state.elements.find(x=>x.id===sel);
+  if(!el) return;
+  const step=e.shiftKey?10:1;
+  if(e.key==="ArrowLeft"){el.x=Math.max(0,el.x-step);}
+  else if(e.key==="ArrowRight"){el.x+=step;}
+  else if(e.key==="ArrowUp"){el.y=Math.max(0,el.y-step);}
+  else if(e.key==="ArrowDown"){el.y+=step;}
+  else if(e.key==="Backspace"||e.key==="Delete"){state.elements=state.elements.filter(x=>x.id!==el.id);sel=null;refresh();return;}
+  else return;
+  e.preventDefault(); commit();
+  const px=$("p_x"),py=$("p_y"); if(px){px.value=el.x;py.value=el.y;}
+});
+
+/* code pane -> model */
+let codeTimer=null;
+$("code").addEventListener("input",()=>{
+  if(syncing) return;
+  clearTimeout(codeTimer);
+  codeTimer=setTimeout(()=>{
+    liveValidate();
+    try{
+      const st=parseAny($("code").value);
+      if(st.elements.length){
+        const keep=st.elements.find(e=>e.id===sel)?sel:null;
+        state=st; sel=keep;
+        renderLabel();renderElList();renderProps();renderChrome();persist();
+      }
+    }catch(err){}
+  },350);
+});
+
+/* header / chrome wiring */
+document.querySelectorAll("#fmtPills button").forEach(b=>{
+  b.onclick=()=>{ if(state.fmt!==b.dataset.fmt){ state.fmt=b.dataset.fmt; refresh(); toast("Converted to "+b.textContent); } };
+});
+document.querySelectorAll("#zoomCtl button").forEach(b=>{
+  b.onclick=()=>{zoom=+b.dataset.z;document.querySelectorAll("#zoomCtl button").forEach(x=>x.classList.toggle("on",x===b));renderLabel();};
+});
+$("dataToggle").onclick=()=>{useSample=!useSample;$("dataToggle").classList.toggle("on",useSample);renderLabel();};
+$("lw").oninput=e=>{state.w=Math.max(50,+e.target.value||50);commit(false);renderChrome();};
+$("lh").oninput=e=>{state.h=Math.max(50,+e.target.value||50);commit(false);renderChrome();};
+$("btnAddText").onclick=()=>{const el=newText(20,20,"{PATIENT_NAME}",20);state.elements.push(el);sel=el.id;refresh();};
+$("btnAddBar").onclick=()=>{const el=newBar(20,20,"{SAMPLE_ID}",50,2);state.elements.push(el);sel=el.id;refresh();};
+
+/* presets */
+const presetSel=$("preset");
+presetSel.innerHTML=PRESETS.map((p,i)=>`<option value="${i}">${p[0]}</option>`).join("")+`<option value="custom">Custom…</option>`;
+presetSel.onchange=()=>{
+  if(presetSel.value==="custom") return;
+  const p=PRESETS[+presetSel.value];
+  state.w=p[1]; state.h=p[2];
+  commit(false); renderChrome();
+};
+
+/* templates */
+const tplSel=$("tplSelect");
+tplSel.innerHTML=TEMPLATES.map((t,i)=>`<option value="${i}">${t.name} · ${t.fmt}</option>`).join("");
+tplSel.onchange=()=>{ state=parseAny(TEMPLATES[+tplSel.value].src); sel=null; refresh(); };
+
+/* modals */
+function openModal(id){ $(id).classList.add("open"); if(id==="mVars"){renderVars();$("varSearch").focus();} if(id==="mSaves")renderSaves(); }
+function closeModal(id){ $(id).classList.remove("open"); }
+document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+document.querySelectorAll(".backdrop").forEach(bd=>bd.addEventListener("mousedown",e=>{ if(e.target===bd) bd.classList.remove("open"); }));
+$("btnVars").onclick=()=>openModal("mVars");
+$("btnSaves").onclick=()=>openModal("mSaves");
+$("varSearch").oninput=()=>renderVars();
+
+/* save / copy / download — all validated */
+$("btnSave").onclick=()=>validateThen(()=>{
+  $("saveName").value=state.fmt.toUpperCase()+" label · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+  openModal("mSaveAs"); $("saveName").select();
+});
+$("saveConfirm").onclick=()=>{
+  const name=$("saveName").value.trim()||"Untitled edit";
+  const saves=getSaves();
+  saves.push({id:Date.now(),name,fmt:state.fmt,code:$("code").value,w:state.w,h:state.h,ts:Date.now()});
+  putSaves(saves);
+  closeModal("mSaveAs"); toast("Saved “"+name+"”");
+};
+$("saveName").addEventListener("keydown",e=>{ if(e.key==="Enter")$("saveConfirm").click(); });
+$("btnCopy").onclick=()=>validateThen(async()=>{
+  try{await navigator.clipboard.writeText($("code").value);}catch(e){$("code").select();document.execCommand("copy");}
+  toast("Source copied");
+});
+$("btnDownload").onclick=()=>validateThen(()=>{
+  const blob=new Blob([$("code").value.replace(/\n/g,"\r\n")+"\r\n"],{type:"application/octet-stream"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="label-"+state.fmt+".prn";
+  a.click(); URL.revokeObjectURL(a.href);
+});
+
+/* boot: restore session work if present */
+(function boot(){
+  let restored=false;
+  try{
+    const cur=sget("prn.current");
+    if(cur){ const o=JSON.parse(cur); state=parseAny(o.code); state.fmt=o.fmt; restored=state.elements.length>0; }
+  }catch(e){}
+  if(!restored) state=parseAny(TEMPLATES[0].src);
+  refresh();
+  if(restored) toast("Restored your last edit from this session");
+})();
+</script>
+</body>
+</html>
