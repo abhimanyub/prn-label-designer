@@ -486,24 +486,24 @@ function genTSPL(st){
 function generate(st){ return st.fmt==="zpl"?genZPL(st):st.fmt==="tspl"?genTSPL(st):genEPL(st); }
 /* ================= variable catalog (from CrelioHealth debug log) ================= */
 const VARS=[
-["SAMPLE_ID","000614926"],["BARCODE","000614926"],["MANUALSAMPLEID","000614926"],["AUTOSAMPLEID","104"],
+["SAMPLE_ID","000123456"],["BARCODE","000123456"],["MANUALSAMPLEID","000123456"],["AUTOSAMPLEID","104"],
 ["SAMPLE_NAME","Serum-1"],["SAMPLE_TYPE","Serum"],["SAMPLE_DATE","29-05-2026 16:29"],["SAMPLEDATE","2026-05-29T16:29:01Z"],
 ["REPORT_SAMPLE_NAME","Serum-1"],["REPORT_SAMPLE_TYPE","Serum"],["REPORT_CONTAINER_TYPE","SST 5mL"],["CONTAINER_TYPE","SST 5mL"],
 ["TUBE_COLOR","YELLOW"],["PRIORITY","ROUTINE"],
 ["ACCESSION_DATETIME","29-05-2026 16:29"],["ACCESSIONDATE","2026-05-29T16:29:01Z"],["REPORTDATE","2026-05-29T16:29:01Z"],
 ["CURRENT_LOCAL_TIME","2026-06-04 20:55"],["CURRENT_TIME","2026-06-04T15:25:05Z"],
-["PATIENT_NAME","Tammy Smith"],["PATIENT_FULLNAME","Tammy Smith"],["PATIENT_FIRSTNAME","Tammy"],["PATIENT_MIDDLENAME","K"],["PATIENT_LASTNAME","Smith"],["PATIENT_SUFFIX","Jr"],
-["AGE","4 years"],["PATIENT_AGE","4 years"],["PATIENT_AGEINDAYS","1486"],["DOB","2022-05-04"],["PATIENT_DATEOFBIRTH","2022-05-04"],
+["PATIENT_NAME","Jane Doe"],["PATIENT_FULLNAME","Jane Doe"],["PATIENT_FIRSTNAME","Jane"],["PATIENT_MIDDLENAME","M"],["PATIENT_LASTNAME","Doe"],["PATIENT_SUFFIX","Jr"],
+["AGE","34 years"],["PATIENT_AGE","34 years"],["PATIENT_AGEINDAYS","12450"],["DOB","1992-03-15"],["PATIENT_DATEOFBIRTH","1992-03-15"],
 ["GENDER","F"],["PATIENT_SEX","Female"],
-["PATIENT_ID","111"],["PATIENT_LABPATIENTID","9874"],["PATIENT_LABUSERID","111"],["PATIENT_PATIENTTYPE","I"],
-["PATIENT_CONTACT","1234567999"],["PATIENT_ALTERNATECONTACT","1234567888"],["PATIENT_COUNTRYCODE","1"],["PATIENT_EMAIL","tammy@example.com"],
-["PATIENT_HEIGHT","104 cm"],["PATIENT_WEIGHT","17 kg"],["PATIENT_WARDNO","W-3"],["PATIENT_DESIGNATION","STAFF"],
-["PATIENT_NATIONALITY","USA"],["PATIENT_NATIONALIDENTITYNUMBER","XXX-XX-1234"],["PATIENT_PASSPORTNO","P1234567"],["PATIENT_WORKERCODE","WC-88"],
-["NATIONAL_ID","XXX-XX-1234"],["EMPLOYEE_ID","EMP-204"],["USERNAME","frontdesk1"],
+["PATIENT_ID","1001"],["PATIENT_LABPATIENTID","12345"],["PATIENT_LABUSERID","1001"],["PATIENT_PATIENTTYPE","I"],
+["PATIENT_CONTACT","5551234567"],["PATIENT_ALTERNATECONTACT","5559876543"],["PATIENT_COUNTRYCODE","1"],["PATIENT_EMAIL","jane.doe@example.com"],
+["PATIENT_HEIGHT","165 cm"],["PATIENT_WEIGHT","62 kg"],["PATIENT_WARDNO","W-3"],["PATIENT_DESIGNATION","STAFF"],
+["PATIENT_NATIONALITY","USA"],["PATIENT_NATIONALIDENTITYNUMBER","XXX-XX-1234"],["PATIENT_PASSPORTNO","P0000000"],["PATIENT_WORKERCODE","WC-88"],
+["NATIONAL_ID","XXX-XX-1234"],["EMPLOYEE_ID","EMP-204"],["USERNAME","demo.user"],
 ["TESTNAME","ANA Confirmatory Test"],["TESTCODE","10060"],["TESTCATEGORY","Immunology"],
 ["TESTS","10060"],["TESTS_LINE_1","10060"],["TESTS_LINE_2","10072"],["TESTS_LINE_3","ALT"],
 ["SHORT_TEXT","ANA Profile"],["SHORTTEXT","ANA Profile"],["SHORT_TEXT_1","ANA Profile"],["SHORT_TEXT_2","UA"],["SHORT_TEXT_3","ALT"],
-["DEPARTMENTNAME","Biochemistry"],["LABNAME","Life Well Cadence Labs"],["PROFILECODE","WELLNESS-A"],
+["DEPARTMENTNAME","Biochemistry"],["LABNAME","Demo Lab Name"],["PROFILECODE","WELLNESS-A"],
 ["BILL_ID","91"],["BILL_LABBILLID","91"],["BILL_ORDERNUMBER","ORD-20458"],["BILL_BILLCOMPANY","SELF PAY"],
 ["BILL_REFERAL","SELF"],["BILL_BILLREFERAL","SELF"],["BILL_BILLTIME","2026-05-29T16:29:01Z"],["BILL_WARD_NUMBER","W-3"],
 ["ORG_ID","12345"],["ORGANIZATION_ORGCODE","12345"],["ORGANIZATION_ORGFULLNAME","DIRECT"],
@@ -620,7 +620,7 @@ function getSaves(){ try{ return JSON.parse(sget("prn.saves")||"[]"); }catch(e){
 function putSaves(arr){ sset("prn.saves",JSON.stringify(arr)); }
 
 /* ================= state & rendering ================= */
-let state=null, sel=null, zoom=2, useSample=true, syncing=false, lastValidation=null;
+let state=null, sel=null, zoom=2, useSample=true, syncing=false, lastValidation=null, varAddMode=false;
 const sampleData={...SAMPLE_DEFAULTS};
 const $=id=>document.getElementById(id);
 
@@ -773,6 +773,18 @@ function syncSizes(el){
 /* ================= variables modal ================= */
 function renderVars(){
   const box=$("varList"); box.innerHTML="";
+  if(varAddMode){
+    const top=document.createElement("div");
+    top.className="var-row";
+    top.innerHTML=`<code style="color:var(--mut)">pick a variable for the new text…</code><span style="flex:1"></span><button class="btn">Blank text</button>`;
+    top.querySelector(".btn").onclick=()=>{
+      const ne=newText(20,20,"New text",20);
+      state.elements.push(ne); sel=ne.id;
+      varAddMode=false; closeModal("mVars");
+      commit(true); toast("Blank text element added");
+    };
+    box.appendChild(top);
+  }
   const q=($("varSearch").value||"").toUpperCase();
   const used=usedPlaceholders();
   const all=[...VARS.map(v=>v[0])];
@@ -794,6 +806,13 @@ function renderVars(){
 }
 function insertVariable(k){
   const tok="{"+k+"}";
+  if(varAddMode){
+    const ne=newText(20,20,tok,20);
+    state.elements.push(ne); sel=ne.id;
+    varAddMode=false; closeModal("mVars");
+    commit(true); toast(tok+" added as new text element");
+    return;
+  }
   const el=state.elements.find(e=>e.id===sel);
   if(el&&el.kind==="text"){ el.text=el.text?el.text+" "+tok:tok; toast(tok+" appended to selected text"); }
   else if(el&&el.kind==="barcode"){ el.data=tok; toast("Barcode data set to "+tok); }
@@ -951,7 +970,7 @@ document.querySelectorAll("#zoomCtl button").forEach(b=>{
 $("dataToggle").onclick=()=>{useSample=!useSample;$("dataToggle").classList.toggle("on",useSample);renderLabel();};
 $("lw").oninput=e=>{state.w=Math.max(50,+e.target.value||50);commit(false);renderChrome();};
 $("lh").oninput=e=>{state.h=Math.max(50,+e.target.value||50);commit(false);renderChrome();};
-$("btnAddText").onclick=()=>{const el=newText(20,20,"{PATIENT_NAME}",20);state.elements.push(el);sel=el.id;refresh();};
+$("btnAddText").onclick=()=>{varAddMode=true;openModal("mVars");};
 $("btnAddBar").onclick=()=>{const el=newBar(20,20,"{SAMPLE_ID}",50,2);state.elements.push(el);sel=el.id;refresh();};
 
 /* presets */
@@ -971,10 +990,10 @@ tplSel.onchange=()=>{ state=parseAny(TEMPLATES[+tplSel.value].src); sel=null; re
 
 /* modals */
 function openModal(id){ $(id).classList.add("open"); if(id==="mVars"){renderVars();$("varSearch").focus();} if(id==="mSaves")renderSaves(); }
-function closeModal(id){ $(id).classList.remove("open"); }
+function closeModal(id){ $(id).classList.remove("open"); if(id==="mVars") varAddMode=false; }
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
 document.querySelectorAll(".backdrop").forEach(bd=>bd.addEventListener("mousedown",e=>{ if(e.target===bd) bd.classList.remove("open"); }));
-$("btnVars").onclick=()=>openModal("mVars");
+$("btnVars").onclick=()=>{varAddMode=false;openModal("mVars");};
 $("btnSaves").onclick=()=>openModal("mSaves");
 $("varSearch").oninput=()=>renderVars();
 
