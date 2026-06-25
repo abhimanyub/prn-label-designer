@@ -134,6 +134,9 @@
   <div class="pills" id="zoomCtl">
     <button data-z="1">1×</button><button data-z="1.5">1.5×</button><button data-z="2" class="on">2×</button><button data-z="3">3×</button>
   </div>
+  <select id="dpiSelect" title="Printer resolution" style="font-family:var(--mono);font-size:11px">
+    <option value="203">203 dpi</option><option value="300">300 dpi</option><option value="600">600 dpi</option>
+  </select>
   <div class="toggle on" id="dataToggle"><div class="sw"></div>Sample data</div>
   <div class="spacer"></div>
   <button class="btn" id="btnVars">Variables</button>
@@ -227,6 +230,22 @@
   <div class="m-foot"><span class="hint" id="issueSummary"></span><div class="spacer"></div>
     <button class="btn" data-close="mIssues">Close</button>
     <button class="btn primary" id="issueProceed" style="display:none">Proceed anyway</button></div>
+</div></div>
+
+
+<!-- dpi change modal -->
+<div class="backdrop" id="mDpi"><div class="modal" style="width:480px">
+  <div class="m-head"><h3>Change resolution</h3><button class="x" data-close="mDpi">✕</button></div>
+  <div class="m-body">
+    <p style="color:var(--mut);font-size:12.5px;line-height:1.6;margin-bottom:12px" id="dpiMsg"></p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn" id="dpiRescale" style="text-align:left;padding:11px 12px;line-height:1.5">
+        <b style="color:var(--ink)">Rescale layout</b><br><span class="hint" id="dpiRescaleHint"></span></button>
+      <button class="btn" id="dpiReinterpret" style="text-align:left;padding:11px 12px;line-height:1.5">
+        <b style="color:var(--ink)">Keep dot values</b><br><span class="hint" id="dpiReinterpretHint"></span></button>
+    </div>
+  </div>
+  <div class="m-foot hint">Rescale preserves physical size across printers · Keep-dots matches what raw firmware does when you send the same file to a different printer.</div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -2587,6 +2606,11 @@ function nativesFromH(h){
   for(const f of ["A","B","C","D","E"]) for(let vm=1;vm<=6;vm++){ const d=Math.abs(ezFontPair(f)[1]*vm-h); if(d<ebd){ebd=d;ezf=f;evm=vm;} }
   return {epl:{font:best,hm:bvm,vm:bvm,rev:"N"},zpl:{h:h,w:0},tspl:{font:tf,xm:tym,ym:tym},ez:{font:ezf,hm:evm,vm:evm,rev:0}};
 }
+/* ================= DPI handling ================= */
+const DPIS=[203,300,600];
+function dotsPerMM(dpi){ return dpi/25.4; }            // 203->7.992, 300->11.81, 600->23.62
+function dotsToMM(d,dpi){ return d/dotsPerMM(dpi); }
+function mmToDots(mm,dpi){ return Math.round(mm*dotsPerMM(dpi)); }
 let uid=1;
 function newText(x,y,text,h){
   const n=nativesFromH(h||20);
@@ -2600,6 +2624,7 @@ function newQR(x,y,data,cell){
 }
 
 /* ================= parsers ================= */
+let PARSE_DPI=203;
 function detectFormat(src){
   if(/\^XA/.test(src)) return "zpl";
   if(/(^|\n)\s*\^Q\d/.test(src) && /(^|\n)\s*\^[LW]/m.test(src) && !/\^XA/.test(src)) return "ezpl";
@@ -2609,7 +2634,7 @@ function detectFormat(src){
 }
 function parseEPL(src){
   const lines=src.replace(/\r/g,"").split("\n");
-  const st={fmt:"epl",w:400,h:200,dpi:203,header:[],elements:[]};
+  const st={fmt:"epl",w:400,h:200,dpi:PARSE_DPI,header:[],elements:[]};
   for(const raw of lines){
     const line=raw.trim();
     if(!line) continue;
@@ -2634,7 +2659,7 @@ function parseEPL(src){
   return st;
 }
 function parseZPL(src){
-  const st={fmt:"zpl",w:400,h:230,dpi:203,header:[],elements:[]};
+  const st={fmt:"zpl",w:400,h:230,dpi:PARSE_DPI,header:[],elements:[]};
   const body=src.replace(/[\r\n]/g,"");
   const toks=body.split("^").map(t=>t.trim()).filter(Boolean);
   let fo=null,cf={h:25,w:0},by={n:2},bc=null,m;
@@ -2665,12 +2690,12 @@ function parseZPL(src){
 }
 function parseTSPL(src){
   const lines=src.replace(/\r/g,"").split("\n");
-  const st={fmt:"tspl",w:400,h:200,dpi:203,header:[],elements:[]};
+  const st={fmt:"tspl",w:400,h:200,dpi:PARSE_DPI,header:[],elements:[]};
   for(const raw of lines){
     const line=raw.trim();
     if(!line) continue;
     let m;
-    if(m=line.match(/^SIZE\s+([\d.]+)\s*mm\s*,\s*([\d.]+)\s*mm/i)){ st.w=Math.round(+m[1]*8); st.h=Math.round(+m[2]*8); continue; }
+    if(m=line.match(/^SIZE\s+([\d.]+)\s*mm\s*,\s*([\d.]+)\s*mm/i)){ st.dpi=PARSE_DPI; st.w=mmToDots(+m[1],PARSE_DPI); st.h=mmToDots(+m[2],PARSE_DPI); continue; }
     if(m=line.match(/^TEXT\s+(-?\d+),(-?\d+),"([^"]+)",(\d+),(\d+),(\d+),"(.*)"\s*$/i)){
       const f=TSPL_FONTS[m[3]]?m[3]:"3";
       const el=newText(+m[1],+m[2],m[7],TSPL_FONTS[f][1]*+m[6]);
@@ -2698,14 +2723,14 @@ const EZPL_FONTH={ "A":[ 9,15],"B":[12,20],"C":[14,22],"D":[20,30],"E":[28,42],"
 function ezFontPair(f){ return EZPL_FONTH[f]||EZPL_FONTH["B"]; }
 function parseEZPL(src){
   const lines=src.replace(/\r/g,"").split("\n");
-  const st={fmt:"ezpl",w:400,h:240,dpi:203,header:[],elements:[],rt:[]};
+  const st={fmt:"ezpl",w:400,h:240,dpi:PARSE_DPI,header:[],elements:[],rt:[]};
   let started=false;
   for(const raw of lines){
     const line=raw.trim();
     if(!line) continue;
     let m;
-    if(m=line.match(/^\^Q(\d+)(?:,(\d+))?/)){ st.h=Math.round(+m[1]*8); st.header.push({k:"raw",line}); continue; } // ^Q in mm
-    if(m=line.match(/^\^W(\d+)/)){ st.w=Math.round(+m[1]*8); st.header.push({k:"raw",line}); continue; }
+    if(m=line.match(/^\^Q(\d+)(?:,(\d+))?/)){ st.dpi=PARSE_DPI; st.h=mmToDots(+m[1],PARSE_DPI); st.header.push({k:"raw",line}); continue; } // ^Q in mm
+    if(m=line.match(/^\^W(\d+)/)){ st.dpi=PARSE_DPI; st.w=mmToDots(+m[1],PARSE_DPI); st.header.push({k:"raw",line}); continue; }
     if(/^\^L/.test(line)){ started=true; st.header.push({k:"L"}); continue; }
     if(/^E$/.test(line)){ st.header.push({k:"E"}); continue; }
     if(/^~/.test(line)){ st.header.push({k:"tilde",line}); continue; }
@@ -2733,6 +2758,7 @@ function parseEZPL(src){
   return st;
 }
 function genEZPL(st){
+  const EZ_DPI=st.dpi||203;
   const out=[];
   // header lines are everything before the ^L marker; tildes after E (e.g. ~S,BUFCLR) are emitted at the end
   const lIdx=st.header.findIndex(h=>h.k==="L");
@@ -2742,12 +2768,12 @@ function genEZPL(st){
   const hasHdr=raws.some(l=>/^\^Q/.test(l));
   if(hasHdr){
     for(const l of raws){
-      if(/^\^Q/.test(l)) out.push(`^Q${Math.round(st.h/8)},2`);
-      else if(/^\^W/.test(l)) out.push(`^W${Math.round(st.w/8)}`);
+      if(/^\^Q/.test(l)) out.push(`^Q${Math.round(dotsToMM(st.h,EZ_DPI))},2`);
+      else if(/^\^W/.test(l)) out.push(`^W${Math.round(dotsToMM(st.w,EZ_DPI))}`);
       else out.push(l);
     }
   }else{
-    out.push(`^Q${Math.round(st.h/8)},2`,`^W${Math.round(st.w/8)}`,"^H10","^P1","^S2","^AD","^C1","^R0","~Q+0","^O0","^D0","^E12","~R255");
+    out.push(`^Q${Math.round(dotsToMM(st.h,EZ_DPI))},2`,`^W${Math.round(dotsToMM(st.w,EZ_DPI))}`,"^H10","^P1","^S2","^AD","^C1","^R0","~Q+0","^O0","^D0","^E12","~R255");
   }
   if(!out.some(l=>/^\^L/.test(l))) out.push("^L");
   for(const rt of (st.rt||[])) out.push(rt);
@@ -2768,9 +2794,12 @@ function genEZPL(st){
   return out.join("\n");
 }
 
-function parseAny(src){
+function parseAny(src,dpi){
+  PARSE_DPI=dpi||203;
   const f=detectFormat(src);
-  return f==="zpl"?parseZPL(src):f==="tspl"?parseTSPL(src):f==="ezpl"?parseEZPL(src):parseEPL(src);
+  const st=f==="zpl"?parseZPL(src):f==="tspl"?parseTSPL(src):f==="ezpl"?parseEZPL(src):parseEPL(src);
+  if(!st.dpi) st.dpi=PARSE_DPI;
+  return st;
 }
 
 /* ================= validation ================= */
@@ -2884,7 +2913,8 @@ function genZPL(st){
   return out.join("\n");
 }
 function genTSPL(st){
-  const out=[`SIZE ${(st.w/8).toFixed(0)} mm,${(st.h/8).toFixed(0)} mm`];
+  const dpi=st.dpi||203;
+  const out=[`SIZE ${dotsToMM(st.w,dpi).toFixed(0)} mm,${dotsToMM(st.h,dpi).toFixed(0)} mm`];
   const hdr=st.header.filter(h=>h.k==="raw").map(h=>h.line).filter(l=>!/^SIZE/i.test(l));
   if(hdr.length) out.push(...hdr); else out.push("GAP 3 mm,0","DIRECTION 0");
   out.push("CLS");
@@ -2925,16 +2955,16 @@ const VARS=[
 ];
 const SAMPLE_DEFAULTS=Object.fromEntries(VARS);
 
-/* ================= label size presets (203 dpi · 8 dots/mm) ================= */
+/* ================= label size presets (stored in mm, dots derived from current DPI) ================= */
 const PRESETS=[
-["50 × 25 mm — vial / sample (2×1\")",400,200],
-["38 × 25 mm — small vial (1.5×1\")",304,200],
-["50 × 30 mm",400,240],
-["57 × 32 mm",456,256],
-["75 × 50 mm (3×2\")",600,400],
-["100 × 50 mm (4×2\")",800,400],
-["100 × 75 mm (4×3\")",800,600],
-["100 × 150 mm — shipping (4×6\")",800,1200]
+["50 × 25 mm — vial / sample (2×1\")",50,25],
+["38 × 25 mm — small vial (1.5×1\")",38,25],
+["50 × 30 mm",50,30],
+["57 × 32 mm",57,32],
+["75 × 50 mm (3×2\")",75,50],
+["100 × 50 mm (4×2\")",100,50],
+["100 × 75 mm (4×3\")",100,75],
+["100 × 150 mm — shipping (4×6\")",100,150]
 ];
 
 /* ================= templates ================= */
@@ -3113,7 +3143,8 @@ function renderLabel(){
     d.dataset.id=el.id;
     L.appendChild(d);
   }
-  $("sizeBadge").innerHTML=`<b>${state.w} × ${state.h}</b> dots&nbsp;&nbsp;·&nbsp;&nbsp;${(state.w/8).toFixed(1)} × ${(state.h/8).toFixed(1)} mm&nbsp;&nbsp;·&nbsp;&nbsp;203 dpi&nbsp;&nbsp;·&nbsp;&nbsp;CODE 128`;
+  const _dpi=state.dpi||203;
+  $("sizeBadge").innerHTML=`<b>${state.w} × ${state.h}</b> dots&nbsp;&nbsp;·&nbsp;&nbsp;${dotsToMM(state.w,_dpi).toFixed(1)} × ${dotsToMM(state.h,_dpi).toFixed(1)} mm&nbsp;&nbsp;·&nbsp;&nbsp;${_dpi} dpi&nbsp;&nbsp;·&nbsp;&nbsp;CODE 128`;
 }
 function renderElList(){
   const box=$("elList"); box.innerHTML="";
@@ -3295,11 +3326,11 @@ function renderSaves(){
   if(!saves.length){ box.innerHTML='<div class="empty" style="padding:14px 0">No saved edits yet. Use “Save edit” to snapshot the current label with a name.</div>'; return; }
   for(const s of [...saves].reverse()){
     const row=document.createElement("div"); row.className="save-row";
-    row.innerHTML=`<div style="flex:1;min-width:0"><div class="nm"></div><div class="meta">${s.fmt.toUpperCase()} · ${s.w}×${s.h} dots · ${new Date(s.ts).toLocaleTimeString()}</div></div>
+    row.innerHTML=`<div style="flex:1;min-width:0"><div class="nm"></div><div class="meta">${s.fmt.toUpperCase()} · ${s.w}×${s.h} dots · ${s.dpi||203}dpi · ${new Date(s.ts).toLocaleTimeString()}</div></div>
       <button class="btn load">Load</button><button class="btn del" style="color:var(--err)">Delete</button>`;
     row.querySelector(".nm").textContent=s.name;
     row.querySelector(".load").onclick=()=>{
-      state=parseAny(s.code); state.fmt=s.fmt; sel=null; refresh(); closeModal("mSaves"); toast("Loaded “"+s.name+"”");
+      state=parseAny(s.code,s.dpi||203); state.fmt=s.fmt; state.dpi=s.dpi||203; sel=null; refresh(); closeModal("mSaves"); toast("Loaded “"+s.name+"”");
     };
     row.querySelector(".del").onclick=()=>{ putSaves(getSaves().filter(x=>x.id!==s.id)); renderSaves(); };
     box.appendChild(row);
@@ -3350,14 +3381,17 @@ function renderChrome(){
   document.querySelectorAll("#fmtPills button").forEach(b=>b.classList.toggle("on",b.dataset.fmt===state.fmt));
   $("btnAddQR").style.display=state.fmt==="ezpl"?"":"none";
   $("lw").value=state.w; $("lh").value=state.h;
-  $("mmHint").textContent=`= ${(state.w/8).toFixed(1)} × ${(state.h/8).toFixed(1)} mm at 203 dpi (8 dots/mm)`;
-  const pi=PRESETS.findIndex(p=>p[1]===state.w&&p[2]===state.h);
+  const dq=state.dpi||203;
+  $("mmHint").textContent=`= ${dotsToMM(state.w,dq).toFixed(1)} × ${dotsToMM(state.h,dq).toFixed(1)} mm at ${dq} dpi (${dotsPerMM(dq).toFixed(1)} dots/mm)`;
+  $("dpiSelect").value=String(dq);
+  const d=state.dpi||203;
+  const pi=PRESETS.findIndex(p=>Math.abs(mmToDots(p[1],d)-state.w)<=1&&Math.abs(mmToDots(p[2],d)-state.h)<=1);
   $("preset").value=pi>=0?pi:"custom";
 }
 let persistTm=null;
 function persist(){
   clearTimeout(persistTm);
-  persistTm=setTimeout(()=>sset("prn.current",JSON.stringify({fmt:state.fmt,code:generate(state)})),300);
+  persistTm=setTimeout(()=>sset("prn.current",JSON.stringify({fmt:state.fmt,dpi:state.dpi||203,code:generate(state)})),300);
 }
 function refresh(code=true){
   renderLabel(); renderElList(); renderProps(); renderChrome();
@@ -3412,9 +3446,11 @@ $("code").addEventListener("input",()=>{
   codeTimer=setTimeout(()=>{
     liveValidate();
     try{
-      const st=parseAny($("code").value);
+      const curDpi=state.dpi||203;
+      const st=parseAny($("code").value,curDpi);
       if(st.elements.length){
         const keep=st.elements.find(e=>e.id===sel)?sel:null;
+        st.dpi=curDpi;
         state=st; sel=keep;
         renderLabel();renderElList();renderProps();renderChrome();persist();
       }
@@ -3442,6 +3478,44 @@ document.querySelectorAll("#zoomCtl button").forEach(b=>{
   b.onclick=()=>{zoom=+b.dataset.z;document.querySelectorAll("#zoomCtl button").forEach(x=>x.classList.toggle("on",x===b));renderLabel();};
 });
 $("dataToggle").onclick=()=>{useSample=!useSample;$("dataToggle").classList.toggle("on",useSample);renderLabel();};
+
+/* ---- DPI selector: reinterpret vs rescale ---- */
+let pendingDpi=null;
+function rescaleState(st,factor){
+  st.w=Math.round(st.w*factor); st.h=Math.round(st.h*factor);
+  for(const el of st.elements){
+    el.x=Math.round(el.x*factor); el.y=Math.round(el.y*factor);
+    if(el.kind==="barcode"){ el.height=Math.max(10,Math.round(el.height*factor)); el.narrow=Math.max(1,Math.round(el.narrow*factor)); el.wide=el.narrow*2; }
+    if(el.kind==="qr"){ el.cell=Math.max(2,Math.round(el.cell*factor)); }
+    // scale text by bumping the size natives to the new physical height
+    if(el.kind==="text"){ const h=Math.round(fontH(el,st.fmt)*factor); const n=nativesFromH(h);
+      const rev=el.epl?el.epl.rev:"N"; el.epl=n.epl; el.epl.rev=rev; el.zpl=n.zpl; el.tspl=n.tspl;
+      const erev=(el.ez||{}).rev||0; el.ez=n.ez; el.ez.rev=erev; }
+  }
+}
+$("dpiSelect").onchange=()=>{
+  const newDpi=+$("dpiSelect").value, oldDpi=state.dpi||203;
+  if(newDpi===oldDpi) return;
+  if(!state.elements.length){ state.dpi=newDpi; refresh(); toast(newDpi+" dpi"); return; }
+  pendingDpi={from:oldDpi,to:newDpi};
+  const f=(newDpi/oldDpi);
+  $("dpiMsg").textContent=`Switching from ${oldDpi} to ${newDpi} dpi. Dot coordinates are device-specific — how should the existing layout be handled?`;
+  $("dpiRescaleHint").textContent=`Multiply all coordinates ×${f.toFixed(2)} so the label keeps the same physical size (${dotsToMM(state.w,oldDpi).toFixed(1)}mm stays ${dotsToMM(state.w,oldDpi).toFixed(1)}mm).`;
+  $("dpiReinterpretHint").textContent=`Leave dot values unchanged; the ${dotsToMM(state.w,oldDpi).toFixed(1)}mm label becomes ${dotsToMM(state.w,newDpi).toFixed(1)}mm (finer dots, smaller print).`;
+  $("dpiSelect").value=String(oldDpi); // revert until choice made
+  openModal("mDpi");
+};
+$("dpiRescale").onclick=()=>{
+  if(!pendingDpi) return;
+  rescaleState(state, pendingDpi.to/pendingDpi.from);
+  state.dpi=pendingDpi.to;
+  closeModal("mDpi"); pendingDpi=null; refresh(); toast("Rescaled to "+state.dpi+" dpi");
+};
+$("dpiReinterpret").onclick=()=>{
+  if(!pendingDpi) return;
+  state.dpi=pendingDpi.to;
+  closeModal("mDpi"); pendingDpi=null; refresh(); toast("Now "+state.dpi+" dpi (dots unchanged)");
+};
 $("lw").oninput=e=>{state.w=Math.max(50,+e.target.value||50);commit(false);renderChrome();};
 $("lh").oninput=e=>{state.h=Math.max(50,+e.target.value||50);commit(false);renderChrome();};
 $("btnAddText").onclick=()=>{varAddMode=true;openModal("mVars");};
@@ -3453,15 +3527,15 @@ const presetSel=$("preset");
 presetSel.innerHTML=PRESETS.map((p,i)=>`<option value="${i}">${p[0]}</option>`).join("")+`<option value="custom">Custom…</option>`;
 presetSel.onchange=()=>{
   if(presetSel.value==="custom") return;
-  const p=PRESETS[+presetSel.value];
-  state.w=p[1]; state.h=p[2];
+  const p=PRESETS[+presetSel.value], d=state.dpi||203;
+  state.w=mmToDots(p[1],d); state.h=mmToDots(p[2],d);
   commit(false); renderChrome();
 };
 
 /* templates */
 const tplSel=$("tplSelect");
 tplSel.innerHTML=TEMPLATES.map((t,i)=>`<option value="${i}">${t.name} · ${t.fmt}</option>`).join("");
-tplSel.onchange=()=>{ state=parseAny(TEMPLATES[+tplSel.value].src); sel=null; refresh(); };
+tplSel.onchange=()=>{ const d=state.dpi||203; state=parseAny(TEMPLATES[+tplSel.value].src,d); state.dpi=d; sel=null; refresh(); };
 
 /* modals */
 function openModal(id){ $(id).classList.add("open"); if(id==="mVars"){renderVars();$("varSearch").focus();} if(id==="mSaves")renderSaves(); }
@@ -3480,7 +3554,7 @@ $("btnSave").onclick=()=>validateThen(()=>{
 $("saveConfirm").onclick=()=>{
   const name=$("saveName").value.trim()||"Untitled edit";
   const saves=getSaves();
-  saves.push({id:Date.now(),name,fmt:state.fmt,code:$("code").value,w:state.w,h:state.h,ts:Date.now()});
+  saves.push({id:Date.now(),name,fmt:state.fmt,dpi:state.dpi||203,code:$("code").value,w:state.w,h:state.h,ts:Date.now()});
   putSaves(saves);
   closeModal("mSaveAs"); toast("Saved “"+name+"”");
 };
@@ -3502,9 +3576,10 @@ $("btnDownload").onclick=()=>validateThen(()=>{
   let restored=false;
   try{
     const cur=sget("prn.current");
-    if(cur){ const o=JSON.parse(cur); state=parseAny(o.code); state.fmt=o.fmt; restored=state.elements.length>0; }
+    if(cur){ const o=JSON.parse(cur); state=parseAny(o.code,o.dpi||203); state.fmt=o.fmt; state.dpi=o.dpi||203; restored=state.elements.length>0; }
   }catch(e){}
-  if(!restored) state=parseAny(TEMPLATES[0].src);
+  if(!restored){ state=parseAny(TEMPLATES[0].src,203); state.dpi=203; }
+  $("dpiSelect").value=String(state.dpi||203);
   refresh();
   if(restored) toast("Restored your last edit from this session");
 })();
